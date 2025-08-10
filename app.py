@@ -4,10 +4,12 @@ import subprocess
 import shutil
 import json
 import time
+from dotenv import load_dotenv
 
-# Ollama API configuration
-API_URL = "http://localhost:11434/api/chat"
-MODEL = "llama3.2:1b"  # Fast, efficient model for collaboration
+# Load environment variables from .env file
+load_dotenv()
+
+## Ollama API configuration removed
 
 # Whitelist for safe commands and directories
 ALLOWED_COMMANDS = [
@@ -108,36 +110,33 @@ def execute_command(command, is_destructive=False):
         return f"Error executing command: {str(e)}"
 
 
-# Query Ollama API
-def query_ollama(prompt, ai_name, history, max_tokens=200):
+## Query Ollama API removed
+
+
+# OpenRouter API configuration
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def get_openrouter_response(prompt, model="tngtech/deepseek-r1t2-chimera:free"):
+    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY.strip() == "":
+        raise ValueError("OpenRouter API key is missing. Please set the OPENROUTER_API_KEY environment variable.")
     headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
-    context = "\n".join(history[-3:]) + "\n" + prompt
     data = {
-        "model": MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": f"You are {ai_name}, an AI entrepreneur focused on creating profitable digital products. Your goal is to collaborate and build marketable Python tools. Respond in 2-3 sentences max. Focus on: 1) High-demand niches (productivity, automation, data tools), 2) Quick-to-build solutions, 3) Scalable products. You can create files using: filename: your_file.py followed by ```python code here ```. You can run bash commands using ```bash command here ```. Always include market research, pricing strategy, and distribution plans. Build on the other AI's suggestions. Be concise and actionable. DO NOT say 'SOLUTION_COMPLETE' until you've collaborated for at least 3 exchanges.",
-            },
-            {"role": "user", "content": context},
-        ],
-        "options": {
-            "num_predict": 300,  # Increased for file creation
-            "temperature": 0.8 if ai_name == "Analytica" else 0.9,
-            "top_p": 0.9,
-            "stop": ["<think>", "</think>"],  # Prevent long reasoning chains
-        },
-        "stream": False,
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
     }
     try:
-        response = requests.post(API_URL, headers=headers, json=data)
+        response = requests.post(OPENROUTER_URL, headers=headers, json=data, timeout=30)
         response.raise_for_status()
-        response_data = response.json()
-        return response_data["message"]["content"].strip()
+    except requests.exceptions.Timeout:
+        raise ValueError("The request to OpenRouter timed out. Please try again later.")
     except requests.exceptions.RequestException as e:
-        return f"Error: {str(e)}"
+        raise ValueError(f"An error occurred while communicating with OpenRouter: {e}")
+    return response.json()["choices"][0]["message"]["content"]
 
 
 # Main conversation loop with task execution
@@ -152,7 +151,7 @@ def ai_conversation(problem, max_turns=None, use_speech=False):
 
     while True:
         prompt = f"{current_speaker}, respond to {ai2_name if current_speaker == ai1_name else ai1_name}'s previous message. CREATE a working Python tool or script that can generate revenue. Use 'filename: script_name.py' followed by ```python code ```. Include setup commands with ```bash commands ```. Focus on quick wins with high revenue potential ($50-500/month). If solution is complete, say 'SOLUTION_COMPLETE'."
-        response = query_ollama(prompt, current_speaker, conversation)
+        response = get_openrouter_response(prompt)
 
         # Handle API errors gracefully
         if "Error:" in response:
@@ -223,12 +222,12 @@ def ai_conversation(problem, max_turns=None, use_speech=False):
         current_speaker = ai2_name if current_speaker == ai1_name else ai1_name
         turn += 1
 
-        # Small delay for readability (no rate limits with local Ollama)
+        # Small delay for readability
         time.sleep(1)
 
     # Final summary by Analytica
     prompt = f"{ai1_name}, provide a comprehensive business summary including: 1) All products created, 2) Revenue projections and pricing strategy, 3) Marketing/distribution plan, 4) Next steps for monetization. Final solution for: {problem}"
-    final_response = query_ollama(prompt, ai1_name, conversation)
+    final_response = get_openrouter_response(prompt)
     conversation.append(f"{ai1_name} (Final Solution): {final_response}")
     print(f"\n{conversation[-1]}")
 
@@ -239,5 +238,5 @@ def ai_conversation(problem, max_turns=None, use_speech=False):
 if __name__ == "__main__":
     # High-probability money-making focus
     problem = "Create and package profitable Python tools or automation scripts that can be sold online for recurring revenue. Target high-demand niches like productivity automation, data processing, or business tools. Include pricing strategy and distribution plan."
-    print("Starting AI collaboration with local Ollama...")
+    print("Starting AI collaboration with OpenRouter...")
     ai_conversation(problem, max_turns=None, use_speech=False)
